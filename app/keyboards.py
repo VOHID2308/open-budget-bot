@@ -2,9 +2,9 @@ from telegram import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMa
 from . import config  # VOTE_URL ni runtime'da o‘qiymiz
 
 def main_menu():
-    vote_url = config.VOTE_URL  # joriy qiymat
+    vote_url = config.VOTE_URL
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🗳 Rasmiy sahifa", url=vote_url)],  # WebAppInfo emas, bevosita URL
+        [InlineKeyboardButton("🗳 Rasmiy sahifa", url=vote_url)],
         [InlineKeyboardButton("✅ Men ovoz berdim (skrin)", callback_data="voted")],
         [InlineKeyboardButton("🏆 Reyting", callback_data="top")],
         [InlineKeyboardButton("📜 Qoidalar", callback_data="rules"),
@@ -21,5 +21,11 @@ def ask_contact_kb():
     return ReplyKeyboardMarkup(
         [[KeyboardButton("📞 Kontaktni ulashish", request_contact=True)],
          [KeyboardButton("↩️ Bekor")]],
+        resize_keyboard=True, one_time_keyboard=True
+    )
+
+def ask_payout_choice_kb():
+    return ReplyKeyboardMarkup(
+        [["📱 Telefon raqamga", "💳 Karta raqamga"], ["↩️ Bekor"]],
         resize_keyboard=True, one_time_keyboard=True
     )

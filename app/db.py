@@ -31,7 +31,7 @@ def init_db():
       season_id     TEXT,
       region        TEXT,
       proof_file_id TEXT,
-      status        TEXT DEFAULT 'pending',
+      status        TEXT DEFAULT 'pending', -- pending|approved|rejected
       created_at    TEXT
     );
     CREATE TABLE IF NOT EXISTS audits(
@@ -42,8 +42,14 @@ def init_db():
       created_at TEXT
     );
     """)
+    # yangi ustunlar (migratsiya)
     if not _column_exists(con, "votes", "phone"):
         con.execute("ALTER TABLE votes ADD COLUMN phone TEXT")
+    if not _column_exists(con, "votes", "pay_type"):
+        con.execute("ALTER TABLE votes ADD COLUMN pay_type TEXT")   # 'phone' | 'card'
+    if not _column_exists(con, "votes", "pay_value"):
+        con.execute("ALTER TABLE votes ADD COLUMN pay_value TEXT")  # raqam/karta
+
     con.commit(); con.close()
 
 def audit(tg_id: int, action: str, meta: str = ""):
@@ -70,14 +76,15 @@ def upsert_user(u, phone: Optional[str]=None, region: Optional[str]=None):
                      region or REGION_NAME, datetime.utcnow().isoformat()))
     con.commit(); con.close()
 
-def add_vote(tg_id: int, file_id: str, phone: str) -> int:
+def add_vote(tg_id: int, file_id: str, phone: str, pay_type: str, pay_value: str) -> int:
     con = _db()
-    con.execute("""INSERT INTO votes(tg_id, season_id, region, proof_file_id, status, created_at, phone)
-                   VALUES (?,?,?,?,?,?,?)""",
-                (tg_id, SEASON_ID, REGION_NAME, file_id, "pending", datetime.utcnow().isoformat(), phone))
+    con.execute("""INSERT INTO votes(tg_id, season_id, region, proof_file_id, status, created_at, phone, pay_type, pay_value)
+                   VALUES (?,?,?,?,?,?,?,?,?)""",
+                (tg_id, SEASON_ID, REGION_NAME, file_id, "pending",
+                 datetime.utcnow().isoformat(), phone, pay_type, pay_value))
     vote_id = con.execute("SELECT last_insert_rowid()").fetchone()[0]
     con.commit(); con.close()
-    audit(tg_id, "vote_submitted", f"id={vote_id}, phone={phone}")
+    audit(tg_id, "vote_submitted", f"id={vote_id}, phone={phone}, pay_type={pay_type}, pay_value={pay_value}")
     return vote_id
 
 def approve_vote(vote_id: int) -> str:
@@ -128,7 +135,7 @@ def approved_votes_detail(limit: int = 30, offset: int = 0, season_only: bool = 
     con = _db()
     if season_only:
         sql = """
-        SELECT v.id, v.created_at, v.season_id, v.phone,
+        SELECT v.id, v.created_at, v.season_id, v.phone, v.pay_type, v.pay_value,
                u.tg_id, u.full_name, u.username
         FROM votes v
         JOIN users u ON u.tg_id = v.tg_id
@@ -139,7 +146,7 @@ def approved_votes_detail(limit: int = 30, offset: int = 0, season_only: bool = 
         rows = con.execute(sql, (SEASON_ID, limit, offset)).fetchall()
     else:
         sql = """
-        SELECT v.id, v.created_at, v.season_id, v.phone,
+        SELECT v.id, v.created_at, v.season_id, v.phone, v.pay_type, v.pay_value,
                u.tg_id, u.full_name, u.username
         FROM votes v
         JOIN users u ON u.tg_id = v.tg_id
@@ -187,7 +194,7 @@ def export_votes_csv(season_only: bool = True) -> str:
     con = _db()
     if season_only:
         sql = """
-        SELECT v.id, v.created_at, v.season_id, v.phone,
+        SELECT v.id, v.created_at, v.season_id, v.phone, v.pay_type, v.pay_value,
                u.tg_id, u.full_name, u.username
         FROM votes v
         JOIN users u ON u.tg_id = v.tg_id
@@ -197,7 +204,7 @@ def export_votes_csv(season_only: bool = True) -> str:
         cur = con.execute(sql, (SEASON_ID,))
     else:
         sql = """
-        SELECT v.id, v.created_at, v.season_id, v.phone,
+        SELECT v.id, v.created_at, v.season_id, v.phone, v.pay_type, v.pay_value,
                u.tg_id, u.full_name, u.username
         FROM votes v
         JOIN users u ON u.tg_id = v.tg_id
@@ -207,9 +214,9 @@ def export_votes_csv(season_only: bool = True) -> str:
         cur = con.execute(sql)
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(["vote_id","created_at","season_id","phone","tg_id","full_name","username"])
+    w.writerow(["vote_id","created_at","season_id","phone","pay_type","pay_value","tg_id","full_name","username"])
     for r in cur.fetchall():
-        w.writerow([r["id"], r["created_at"], r["season_id"], r["phone"], r["tg_id"], r["full_name"], r["username"]])
+        w.writerow([r["id"], r["created_at"], r["season_id"], r["phone"], r["pay_type"], r["pay_value"], r["tg_id"], r["full_name"], r["username"]])
     con.close()
     buf.seek(0)
     return buf.getvalue()
